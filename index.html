@@ -1,0 +1,215 @@
+<html>
+
+<head>
+  <title>API DF Exemple</title>
+  <meta charset="utf-8">
+  <link rel="icon" type="image/x-icon" href="./favicon.png">
+  <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-iYQeCzEYFbKjA/T2uDLTpkwGzCiq6soy8tYaI1GyVh/UjpbCx/TYkiZhlZB6+fzT" crossorigin="anonymous">
+  <script defer src="https://pyscript.net/alpha/pyscript.js"></script>
+  <py-env>
+    - folium
+    - branca
+  </py-env>
+</head>
+
+<body>
+
+  <div class="container-fluid">
+    <div class="row">
+      <h1>Marchés immobiliers à partir de DV3F</h1>
+      <p class="lead">
+        Démonstrateur pour l'utilisation des API Données foncières proposées par le Cerema
+      </p>
+    </div>
+
+    <div class="row">
+      <div class="col-sm-4">
+        <select id="select-perimetre" class="form-select" placeholder="Selection">
+          <option value="" disabled selected>Selectionnez un EPCI...</option>
+        </select>
+      </div>
+      <div class="col-sm-4">
+        <select id="select-indicateur" class="form-select">
+          <option value="valeurfonc_median_cod1113">Marché de la maison</option>
+          <option value="valeurfonc_median_cod1213">Marché de l'appartement</option>
+        </select>
+      </div>
+      <div class="col-sm-4" id="chargement">
+      </div>
+    </div>
+
+    <div class="row mt-2">
+      <div class="col-sm-12">
+        <div id="map" style="width: 100%; height: 90%">        
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <py-script>
+    import json
+    import folium
+    import branca
+
+    from js import document
+    from pyodide.http import open_url
+    from pyodide import create_proxy
+
+    DEPARTEMENT = "83"
+
+    map = document.getElementById("map")
+    loader = document.createElement("h5")
+    document.getElementById("chargement").appendChild(loader)
+    loader.innerHTML = "Attente sélection EPCI..."
+
+    def get_epcis(dep):
+      url = f"https://geo.api.gouv.fr/epcis?codeDepartement={dep}"
+      response = json.loads(open_url(url).read())
+      selector = document.getElementById("select-perimetre") 
+      for elt in response:
+        opt = document.createElement("option")
+        opt.innerHTML = elt["nom"]
+        opt.value = elt["code"]
+        selector.appendChild(opt)
+
+
+
+    class Perimetre:
+
+      indicateurs = {
+        "valeurfonc_median_cod1211" : "Appartements neufs ou vefa",
+        "valeurfonc_median_cod1212" : "Appartements récents",
+        "valeurfonc_median_cod1213" : "Appartements anciens",
+        "valeurfonc_median_apx" : "Appartements - T1 ou T2",
+        "valeurfonc_median_amx" : "Appartements - T3 ou T4",
+        "valeurfonc_median_agx" : "Appartements - T5 ou +",
+        "valeurfonc_median_cod1111" : "Maisons neuves ou vefa",
+        "valeurfonc_median_cod1112" : "Maisons récentes",
+        "valeurfonc_median_cod1113" : "Maisons anciennes",
+        "valeurfonc_median_mpx" : "Maisons - surface < 90 m2",
+        "valeurfonc_median_mmx" : "Maisons - surface entre 90 et 130 m2 ",
+        "valeurfonc_median_mgx" : "Maisons - surface > 130 m2",
+      }
+      x_center, y_center = 0, 0
+      mini, maxi = {}, {}
+
+      def __init__(self, code, type_perimetre="communes"):
+        self.code = code
+        self.type_perimetre = type_perimetre
+        self.calculate()
+
+      def ask(self, url):
+        try:
+          response = json.loads(open_url(url).read())
+          return response
+        except Exception as e:
+          print(e)
+          return None
+
+      def get_center(self):
+        url = f"https://geo.api.gouv.fr/epcis/{self.code}?format=geojson&geometry=bbox"
+        geojson = self.ask(url)
+        coordinates = geojson["geometry"]["coordinates"][0]
+        xmin = min([x for x, y in coordinates])
+        xmax = max([x for x, y in coordinates])
+        ymin = min([y for x, y in coordinates])
+        ymax = max([y for x, y in coordinates])
+        self.x_center = xmin + (xmax - xmin)/2.0
+        self.y_center = ymin + (ymax - ymin)/2.0
+
+      def get_perimetre(self):
+        if self.type_perimetre == "communes":
+          url = f"https://geo.api.gouv.fr/epcis/{self.code}/communes?format=geojson&geometry=contour"
+          return self.ask(url)
+
+      def calculate(self):
+        self.get_center()
+        perimetres = self.get_perimetre()
+        for indicateur in self.indicateurs:
+          self.mini[indicateur] = 9999999999
+          self.maxi[indicateur] = 0
+        for perimetre in perimetres["features"]:
+          code = perimetre["properties"]["code"]
+          nom = perimetre["properties"]["nom"]
+          loader.innerHTML = f"Interrogation pour commune {nom} ({code})"
+          url = f'https://apidf-preprod.cerema.fr/indicateurs/dv3f/{self.type_perimetre}/triennal/{code}/?annee=2019'
+          values = self.ask(url)
+          if values:
+            values = values["results"][0]
+            for indicateur in self.indicateurs:
+              perimetre["properties"][indicateur] = values[indicateur] or 0
+              if perimetre["properties"][indicateur] > 0:
+                if perimetre["properties"][indicateur] < self.mini[indicateur]:
+                  self.mini[indicateur]=perimetre["properties"][indicateur]
+                if perimetre["properties"][indicateur] > self.maxi[indicateur]:
+                  self.maxi[indicateur] = perimetre["properties"][indicateur]
+        self.geojson = perimetres
+
+      def affichage_indicateurs(self, choice):
+        if '1113' in choice:
+          return {k : v for k, v in self.indicateurs.items() if "Maisons" in v}
+        if '1213' in choice:
+          return {k : v for k, v in self.indicateurs.items() if "Appartements" in v}
+
+
+      def generate_map(self, choice):
+        indicateur = choice
+        affichage_indics = self.affichage_indicateurs(choice)
+        colorscale = branca.colormap.linear.YlOrRd_09.scale(self.mini[indicateur], self.maxi[indicateur])
+        colorscale.caption = "Prix médian (€) communal entre 2019 et 2021"
+
+        def style_function(feature):
+          value = feature["properties"][indicateur]
+          return {
+            "fillOpacity": 0.9,
+            "weight": 1,
+            "fillColor": colorscale(int(value)) if value > 0 else "lightgray",
+            "color": "darkgray",
+          }
+
+        m = folium.Map(location=[self.y_center, self.x_center], zoom_start=10)
+        folium.GeoJson(self.geojson, 
+                      name="prix communal", 
+                      style_function=style_function, 
+                      popup=folium.GeoJsonPopup(fields=["nom",] + list(affichage_indics.keys()), 
+                      aliases=["nom",] + list(affichage_indics.values()))).add_to(m)
+        #folium.LayerControl().add_to(m)
+        colorscale.add_to(m)
+        map.innerHTML = ""
+        loader.innerHTML = ""
+        pyscript.write("map", m)
+
+    def selection_indicateur(event):
+      choice_indicateur = document.getElementById("select-indicateur").value
+      perimetre.generate_map(choice_indicateur)
+
+    def selection_perimetre(event):
+      global perimetre
+      choice_perimetre = document.getElementById("select-perimetre").value
+      choice_indicateur = document.getElementById("select-indicateur").value
+      perimetre = Perimetre(choice_perimetre)
+      perimetre.generate_map(choice_indicateur)
+
+    def setup():
+      # actions selection indicateur
+      change_indicateur = create_proxy(selection_indicateur)
+      event_ind = document.getElementById("select-indicateur")
+      event_ind.addEventListener("change", change_indicateur)
+      # actions selection perimetre
+      change_perimetre = create_proxy(selection_perimetre)
+      event_peri = document.getElementById("select-perimetre")
+      event_peri.addEventListener("change", change_perimetre)
+
+    get_epcis(DEPARTEMENT)
+    setup()
+
+  </py-script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-u1OknCvxWvY5kfmNBILK2hRnQC3Pr17a+RTT6rIHI7NnikvbZlHgTPOOmMi466C8"
+    crossorigin="anonymous"></script>
+
+</body>
+
+</html>
