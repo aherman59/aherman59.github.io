@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+    <title>API DF - visualiseur</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/css/ol.css" type="text/css">
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-2.9.0.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/build/ol.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.5.0/proj4.js"></script>
+
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+
+    <!-- ol-ext -->
+    <link rel="stylesheet" href="https://cdn.rawgit.com/Viglino/ol-ext/master/dist/ol-ext.min.css" />
+    <script type="text/javascript" src="https://cdn.rawgit.com/Viglino/ol-ext/master/dist/ol-ext.min.js"></script>
+
+    <style>
+        .map {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+        }
+
+        .ol-overlay.menu {
+            width: 35%;
+            height: 100%;
+            box-shadow: 0px 0px 5px #000;
+            padding: 0.5em;
+            -webkit-transition: all 0.25s;
+            transition: all 0.25s;
+        }
+
+        /* style the close box */
+        .ol-overlay.menu .ol-closebox {
+            left: 1em;
+            top: 0.5em;
+        }
+
+        .ol-overlay.menu .ol-closebox:before {
+            content: "\f0c9";
+            font-family: FontAwesome;
+        }
+
+        .ol-control.ol-layerswitcher-popup {
+            top: 6.5em;
+        }
+
+        #infos {
+            padding-top: 1.5em;
+            font-size: 0.9em;
+        }
+
+        /* menu button */
+        .ol-control.menu {
+            top: 0.5em;
+            left: 0.5em;
+        }
+
+        .ol-zoom {
+            left: auto;
+            right: 0.5em;
+        }
+
+        .ol-rotate {
+            right: 3em;
+        }
+
+        .ol-touch .ol-rotate {
+            right: 3.5em;
+        }
+
+        /**/
+
+        .info {
+            color: rgba(224, 229, 231, 0.8);
+            background-image: none;
+            box-shadow: rgba(114, 103, 103, 0.2) 0px 0px 15px;
+            padding: 6px 8px;
+            font: 12px Arial, Helvetica, sans-serif;
+            background: rgba(70, 67, 67, 0.8);
+            border-radius: 5px;
+        }
+
+        .list-group-item {
+            background: rgba(70, 67, 67, 0.8);
+        }
+
+        body {
+            font-size: .875rem;
+        }
+
+        .btn-link,
+        .btn-link:hover,
+        .btn-link:active,
+        .btn-link:focus,
+        .btn-link:visited {
+            color: rgba(224, 229, 231, 0.8);
+            text-decoration: none;
+        }
+
+        /* Styles pour la modale */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-content {
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 400px;
+            color: rgba(224, 229, 231, 0.8);
+            background-image: none;
+            box-shadow: rgba(114, 103, 103, 0.2) 0px 0px 15px;
+            font: 12px Arial, Helvetica, sans-serif;
+            background: rgba(70, 67, 67, 0.8);
+            border-radius: 5px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="fermerModal()">&times;</span>
+            <p>Veuillez saisir votre jeton API Données foncières :</p>
+            <input type="text" style="background-color: #888;" id="jeton">
+            <button onclick="validerJeton()">OK</button>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <main role="main" class="col-md-12 ml-sm-auto col-lg-12 px-0">
+                <div id="map" class="map">
+                    <div id="infos">
+
+                        <div class="info" id="info-parcelle" name="info-parcelle"
+                            style="position: absolute; top: 7%; z-index: 1000; height: 45%; width: 97%; overflow: auto;">
+                            <h6>Aucune parcelle sélectionnée</h6>
+                        </div>
+                        <div class="info" id="info-mutation" name="info-mutation"
+                            style="position: absolute; top: 54%; z-index: 1000; height: 44%; width: 97%; overflow: auto;">
+                            <h6>Aucune mutation</h6>
+                        </div>
+                    </div>
+                    <div class="info" id="info-indicateur" name="info-indicateur"
+                        style="position: absolute; bottom: 10px; right: 10px; z-index: 1000; width: 31%; height: 30%; overflow: auto;">
+                        <div id="graph-dv3f" style="height: 99%; width:99%;"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    <script type="text/javascript">
+
+        var token;
+        var modal = document.getElementById("modal");
+        var jetonInput = document.getElementById("jeton");
+
+        function ouvrirModal() {
+            modal.style.display = "block";
+        }
+
+        function fermerModal() {
+            modal.style.display = "none";
+            map.getView().setZoom(19);
+        }
+
+        function validerJeton() {
+            var jeton = jetonInput.value;
+            token = jeton;
+            console.log("Jeton saisi :", jeton);
+            fermerModal();
+        }
+        ouvrirModal();
+
+
+        // Mise en place du graphique des indicateurs
+
+        function interrogation_ban(lon, lat) {
+            var url = "https://api-adresse.data.gouv.fr/reverse/?type=street&lon=" + lon + "&lat=" + lat;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            var onError = function () { console.log('Erreur : Réponse BAN serveur incorrecte'); };
+            xhr.onerror = onError;
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    response = xhr.responseText;
+                    json_response = JSON.parse(response);
+                    code_insee = json_response["features"][0]["properties"]["citycode"];
+                    change_indicateurs(code_insee);
+                } else {
+                    onError();
+                }
+            }
+            xhr.send();
+        }
+
+
+        function change_indicateurs(code_insee) {
+            var url = "https://apidf-preprod.cerema.fr/indicateurs/dv3f/communes/annuel/" + code_insee + '/';
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            var onError = function () { alert('Erreur : Réponse serveur incorrecte'); };
+            xhr.onerror = onError;
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    response = xhr.responseText;
+                    json_response = JSON.parse(response);
+                    if (json_response['detail'] != null) { alert("Problème interrogation API : " + json_response["detail"]); return null; }
+                    annees = [];
+                    prix_m2_maison = [];
+                    prix_m2_appart = [];
+                    libelle_commune = "";
+                    for (elt of json_response["results"]) {
+                        annees.push(elt["annee"]);
+                        prix_m2_maison.push(elt["pxm2_median_cod111"]);
+                        prix_m2_appart.push(elt["pxm2_median_cod121"]);
+                        libelle_commune = elt["libgeo"];
+                    }
+                    graph_dv3f = document.getElementById("graph-dv3f");
+                    var trace1 = {
+                        x: annees,
+                        y: prix_m2_maison,
+                        type: 'bar',
+                        name: 'Maison',
+                        marker: {
+                            color: 'rgb(49,130,189)',
+                            opacity: 0.7,
+                        }
+                    };
+
+                    var trace2 = {
+                        x: annees,
+                        y: prix_m2_appart,
+                        type: 'bar',
+                        name: 'Appart',
+                        marker: {
+                            color: 'rgb(204,204,204)',
+                            opacity: 0.5
+                        }
+                    };
+                    var data = [trace1, trace2];
+                    var layout = {
+                        title: libelle_commune,
+                        xaxis: {
+                            tickangle: -45
+                        },
+                        barmode: 'group',
+                        margin: { t: 30, b: 30, l: 30, r: 25 },
+                        opacity: 0.1,
+                        paper_bgcolor: 'rgba(0, 0, 0, 0)',
+                        plot_bgcolor: 'rgba(0, 0, 0, 0)',
+                        font: { color: "rgba(255, 255, 255, 1)" },
+                    };
+                    Plotly.newPlot(graph_dv3f, data, layout, { responsive: true });
+
+                } else {
+                    onError();
+                }
+            }
+            xhr.send();
+        }
+
+
+        // Définition de la projection EPSG 2154
+        proj4.defs("EPSG:2154", "+proj=lcc +lat_1=49 +lat_2=44 +lat_0=46.5 +lon_0=3 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+        ol.proj.proj4.register(proj4);
+
+        let euroFrLocale = Intl.NumberFormat('fr-FR');
+        let dateFrLocale = Intl.DateTimeFormat('fr-FR');
+        var url_tile_alidade_dark = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+        var url_tile_osm_bright = 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+        var url_tile_outdoors = 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+        var url_tile_alidade = 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+
+        // Tuiles visibles
+        var stadia_alidade = new ol.layer.Tile(
+            {
+                title: "Stadia Alidade Smooth",
+                source: new ol.source.XYZ({ url: url_tile_alidade }),
+                baseLayer: true,
+            });
+        // Tuiles possibles
+        var stadia_alidade_dark = new ol.layer.Tile(
+            {
+                title: "Stadia Alidade Smooth Dark",
+                source: new ol.source.XYZ({ url: url_tile_alidade_dark }),
+                baseLayer: true,
+                visible: false,
+            });
+        var stadia_outdoors = new ol.layer.Tile(
+            {
+                title: "Stadia Alidade Outdoors",
+                source: new ol.source.XYZ({ url: url_tile_outdoors }),
+                baseLayer: true,
+                visible: false,
+            });
+        var stadia_osm_bright = new ol.layer.Tile(
+            {
+                title: "Stadia OSM Bright",
+                source: new ol.source.XYZ({ url: url_tile_osm_bright }),
+                baseLayer: true,
+                visible: false,
+            });
+        var stamen = new ol.layer.Tile(
+            {
+                title: "Stamen Watercolor",
+                baseLayer: true,
+                visible: false,
+                source: new ol.source.Stamen({
+                    layer: 'watercolor',
+                })
+            });
+
+        var stamen2 = new ol.layer.Tile(
+            {
+                title: "Stamen Toner",
+                baseLayer: true,
+                visible: false,
+                source: new ol.source.Stamen({
+                    layer: 'toner'
+                })
+            });
+
+        var osm = new ol.layer.Tile(
+            {
+                title: "OSM",
+                baseLayer: true,
+                source: new ol.source.OSM(),
+                visible: false
+            });
+
+        // fonction qui appelle l'API et gère la pagination
+        function add_features_next_page(base_url, vectorSource, page) {
+            var url = base_url;
+            if (page > 1) { url += "&page=" + page; };
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            xhr.setRequestHeader("Authorization", "Token " + token);
+            var onError = function () { alert('Erreur : Réponse serveur incorrecte'); };
+            xhr.onerror = onError;
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    response = xhr.responseText;
+                    json_response = JSON.parse(response);
+                    if (json_response['detail'] != null) { alert("Problème interrogation API : " + json_response["detail"]); return null; }
+                    if (page == 1) { vectorSource.clear(); }
+                    vectorSource.addFeatures(
+                        vectorSource.getFormat().readFeatures(response));
+                    next = json_response['next']
+                    if (next != null) {
+                        page += 1;
+                        add_features_next_page(base_url, vectorSource, page);
+                    }
+                } else {
+                    onError();
+                }
+            }
+            xhr.send();
+        }
+
+        var parcelleSource = new ol.source.Vector({
+            format: new ol.format.GeoJSON(
+                {
+                    dataProjection: 'EPSG:4326',
+                    featureProjection: 'EPSG:2154',
+                }
+            ),
+            strategy: ol.loadingstrategy.bbox,
+            loader: function (extent, resolution, projection) {
+                var extent_lonlat = ol.proj.transformExtent(extent, "EPSG:2154", "EPSG:4326");
+                var url = 'https://apidf-preprod.cerema.fr/ff/geoparcelles/?in_bbox=' + extent_lonlat.join(',');
+                add_features_next_page(url, parcelleSource, 1);
+            }
+        });
+
+        var mutationSource = new ol.source.Vector({
+            format: new ol.format.GeoJSON(
+                {
+                    dataProjection: 'EPSG:4326',
+                    featureProjection: 'EPSG:2154',
+                }
+            ),
+            strategy: ol.loadingstrategy.bbox,
+            loader: function (extent, resolution, projection) {
+                var extent_lonlat = ol.proj.transformExtent(extent, "EPSG:2154", "EPSG:4326");
+                var url = 'https://apidf-preprod.cerema.fr/dv3f/geomutations/?in_bbox=' + extent_lonlat.join(',');
+                add_features_next_page(url, mutationSource, 1);
+            }
+        });
+
+        function styleParcelle(couleur_trait, couleur_plein, dash) {
+            return new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: couleur_trait,
+                    lineDash: [dash],
+                    width: 1
+                }),
+                fill: new ol.style.Fill({
+                    color: couleur_plein
+                })
+            });
+        }
+
+        // définition Styles 
+        var styles_parcelles = {
+            // mutations
+            'parcelles': styleParcelle('#B22222', 'rgba(51, 51, 0, 0.0)', 3),
+            'mutations': styleParcelle('#191970', 'rgba(0, 102, 204, 0.15)', 0),
+        };
+
+        var mutationLayer = new ol.layer.Vector({
+            source: mutationSource,
+            style: styles_parcelles['mutations'],
+            minZoom: 18,
+        });
+
+        var parcelleLayer = new ol.layer.Vector({
+            source: parcelleSource,
+            style: styles_parcelles['parcelles'],
+            minZoom: 18,
+        });
+
+        var map = new ol.Map({
+            target: 'map',
+            layers: [
+                stadia_alidade, stadia_alidade_dark, stadia_outdoors, stadia_osm_bright, stamen, stamen2, osm,
+                parcelleLayer, mutationLayer,
+            ],
+            controls: ol.control.defaults().extend
+                ([new ol.control.LayerPopup(),
+                ]),
+            view: new ol.View({
+                projection: 'EPSG:2154',
+                center: [648268.550682, 6874815.700233],
+                zoom: 17
+            })
+        });
+
+        map.on("moveend", function (event) {
+            coords_center = map.getView().getCenter();
+            var coords2154 = ol.proj.transform(coords_center, "EPSG:2154", "EPSG:4326")
+            interrogation_ban(coords2154[0], coords2154[1]);
+        });
+
+        var search = new ol.control.SearchBAN({
+            reverse: true,
+            position: false,
+            placeholder: 'Rechercher...',
+        });
+        map.addControl(search);
+
+        search.on('select', function (e) {
+            map.getView().animate({
+                center: e.coordinate,
+                zoom: Math.max(map.getView().getZoom(), 14)
+            });
+        });
+
+
+        var selection_mutation = new ol.interaction.Select({
+            multi: true,
+            style: function (feature) {
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'red',
+                        lineDash: [4],
+                        width: 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 0, 0, 0.4)'
+                    })
+                });
+            },
+            layers: [mutationLayer]
+        });
+        map.addInteraction(selection_mutation);
+        selection_mutation.on('select', affichage_infos_mutations);
+
+        function affichage_infos_mutations() {
+            var entites = selection_mutation.getFeatures();
+            //entites.getArray().sort(keysort('datemut'));
+            var txt_info = (entites.getArray().length > 0) ? '<h6>' + entites.getArray().length + ' mutation(s)</h6>' : '<h6>Aucune mutation</h6>';
+            txt_info += '<div class="accordion" id="mutations">'
+            txt_info += '<ul class="list-group list-group-flush">'
+            entites.forEach(function (entite) {
+                idmutation = entite.get('idmutinvar');
+                libtypbien = entite.get('libtypbien');
+                datemut = entite.get('datemut');
+                datemut = new Date(datemut)
+                valeurfonc = entite.get('valeurfonc');
+                txt_info += '<li class="list-group-item d-flex justify-content-between align-items-center p-0">'
+                txt_info += '<h6><button class="btn btn-link text-left" style="underline: none;" type="button" data-parent="#mutations" data-toggle="collapse" data-target="#collapse' + idmutation + '" aria-expanded="false" aria-controls="collapse' + idmutation + '" >';
+                txt_info += dateFrLocale.format(datemut) + " - " + libtypbien + "&nbsp;&nbsp;&nbsp;"
+                txt_info += '<span class="badge badge-success badge-pill">'
+                txt_info += euroFrLocale.format(valeurfonc) + ' €'
+                txt_info += '</span></h6>';
+                txt_info += '</button></li>';
+                txt_info += '<div class="collapse" id="collapse' + idmutation + '">';
+                txt_info += '<div class="card card-body info">';
+                txt_info += detail_info(entite);
+                txt_info += '</div>';
+                txt_info += '</div>';
+
+            });
+            txt_info += "</ul>"
+            txt_info += '</div>'
+            $("#info-mutation").html(txt_info);
+            if ($("#infos").is(":hidden")) menu.show();
+        }
+
+        var selection_parcelle = new ol.interaction.Select({
+            multi: true,
+            style: function (feature) {
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'red',
+                        lineDash: [4],
+                        width: 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 0, 0, 0.4)'
+                    })
+                });
+            },
+            layers: [parcelleLayer]
+        });
+        map.addInteraction(selection_parcelle);
+        selection_parcelle.on('select', affichage_infos_parcelles);
+
+        function affichage_infos_parcelles() {
+            var entites = selection_parcelle.getFeatures();
+            //entites.getArray().sort(keysort('datemut'));
+            var entite = (entites.getArray().length > 0) ? entites.getArray()[0] : null;
+            var txt_info = (entites.getArray().length > 0) ? "<h6>Parcelle " + entite.getId() + "</h6>" : '<h6>Aucune parcelle sélectionnée</h6>';
+            if (entite != null) {
+                txt_info += detail_info(entite);
+            }
+            $("#info-parcelle").html(txt_info);
+            if ($("#infos").is(":hidden")) menu.show();
+        }
+
+        function detail_info(entite) {
+            var txt_info = '<ul class="list-group list-group-flush">';
+            for (key of entite.getKeys()) {
+                if (key == "geometry") continue;
+                txt_info += '<h6><li class="list-group-item d-flex justify-content-between align-items-center">';
+                txt_info += key + "&nbsp;&nbsp;&nbsp;";
+                txt_info += '<span class="badge badge-primary">';
+                txt_info += entite.get(key);
+                txt_info += '</span></li></h6>';
+
+            }
+            txt_info += "</ul>";
+            return txt_info;
+        }
+
+        // Overlay
+        var menu = new ol.control.Overlay({
+            closeBox: true,
+            className: "slide-left menu",
+            content: $("#infos").get(0)
+        });
+        map.addControl(menu);
+
+        // A toggle control to show/hide the menu
+        var t = new ol.control.Toggle({
+            html: '<i class="fa fa-bars" ></i>',
+            className: "menu",
+            title: "Menu",
+            onToggle: function () { menu.toggle(); }
+        });
+        map.addControl(t);
+
+
+    </script>
+
+</body>
+
+</html>
