@@ -1,214 +1,412 @@
-<html>
+<!doctype html>
+<html lang="fr">
 
 <head>
-  <title>API DF Exemple</title>
-  <meta charset="utf-8">
-  <link rel="icon" type="image/x-icon" href="./favicon.png">
-  <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-iYQeCzEYFbKjA/T2uDLTpkwGzCiq6soy8tYaI1GyVh/UjpbCx/TYkiZhlZB6+fzT" crossorigin="anonymous">
-  <script defer src="https://pyscript.net/alpha/pyscript.js"></script>
-  <py-env>
-    - folium
-    - branca
-  </py-env>
+    <title>Démonstrateur API DF</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/css/ol.css" type="text/css">
+    <style>
+        .map {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+        }
+
+        .info {
+            color: rgba(224, 229, 231, 0.8);
+            background-image: none;
+            box-shadow: rgba(114, 103, 103, 0.2) 0px 0px 15px;
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: rgba(70, 67, 67, 0.8);
+            border-radius: 5px;
+        }
+
+        .list-group-item {
+            background: rgba(70, 67, 67, 0.8);
+        }
+
+        body {
+            font-size: .875rem;
+        }
+
+        .btn-link,
+        .btn-link:hover,
+        .btn-link:active,
+        .btn-link:focus,
+        .btn-link:visited {
+            color: rgba(224, 229, 231, 0.8);
+            text-decoration: none;
+        }
+    </style>
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-2.9.0.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/gh/openlayers/openlayers.github.io@master/en/v6.5.0/build/ol.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.5.0/proj4.js"></script>
+
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
+        crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"
+        integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
+        crossorigin="anonymous"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
+        integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
+        crossorigin="anonymous"></script>
+
+    <!-- ol-ext -->
+    <link rel="stylesheet" href="https://cdn.rawgit.com/Viglino/ol-ext/master/dist/ol-ext.min.css" />
+    <script type="text/javascript" src="https://cdn.rawgit.com/Viglino/ol-ext/master/dist/ol-ext.min.js"></script>
+
 </head>
 
 <body>
 
-  <div class="container-fluid">
-    <div class="row">
-      <h1>Marchés immobiliers à partir de DV3F</h1>
-      <p class="lead">
-        Démonstrateur pour l'utilisation des API Données foncières proposées par le Cerema
-      </p>
-    </div>
-
-    <div class="row">
-      <div class="col-sm-4">
-        <select id="select-perimetre" class="form-select" placeholder="Selection">
-          <option value="" disabled selected>Selectionnez un EPCI...</option>
-        </select>
-      </div>
-      <div class="col-sm-4">
-        <select id="select-indicateur" class="form-select">
-          <option value="valeurfonc_median_cod1113">Marché de la maison</option>
-          <option value="valeurfonc_median_cod1213">Marché de l'appartement</option>
-        </select>
-      </div>
-      <div class="col-sm-4" id="chargement">
-      </div>
-    </div>
-
-    <div class="row mt-2">
-      <div class="col-sm-12">
-        <div id="map" style="width: 100%; height: 90%">        
+    <div class="container-fluid">
+        <div class="row">
+            <main role="main" class="col-md-12 ml-sm-auto col-lg-12 px-0">
+                <div id="map" class="map">
+                    <div class="info" id="info-mutation" name="info-mutation"
+                        style="position: absolute; bottom: 10px; left: 10px; z-index: 1000; max-height: 50%; max-width: 33%; overflow: auto;">
+                        <h5>Transactions</h5>
+                    </div>
+                    <div class="info" id="info-indicateur" name="info-indicateur"
+                        style="position: absolute; bottom: 10px; right: 10px; z-index: 1000; height: 34%; width: 31%; overflow: auto;">
+                        <div id="graph-dv3f" style="height: 99%; width:99%;"></div>
+                    </div>
+                </div>
+            </main>
         </div>
-      </div>
     </div>
-  </div>
+    <script type="text/javascript">
+        // Mise en place du graphique des indicateurs
 
-  <py-script>
-    import json
-    import folium
-    import branca
-
-    from js import document
-    from pyodide.http import open_url
-    from pyodide import create_proxy
-
-    DEPARTEMENT = "83"
-
-    map = document.getElementById("map")
-    loader = document.createElement("h5")
-    document.getElementById("chargement").appendChild(loader)
-    loader.innerHTML = "Attente sélection EPCI..."
-
-    def get_epcis(dep):
-      url = f"https://geo.api.gouv.fr/epcis?codeDepartement={dep}"
-      response = json.loads(open_url(url).read())
-      selector = document.getElementById("select-perimetre") 
-      for elt in response:
-        opt = document.createElement("option")
-        opt.innerHTML = elt["nom"]
-        opt.value = elt["code"]
-        selector.appendChild(opt)
+        function interrogation_ban(lon, lat) {
+            var url = "https://api-adresse.data.gouv.fr/reverse/?type=street&lon=" + lon + "&lat=" + lat;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            var onError = function () { console.log('Erreur : Réponse BAN serveur incorrecte'); };
+            xhr.onerror = onError;
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    response = xhr.responseText;
+                    json_response = JSON.parse(response);
+                    code_insee = json_response["features"][0]["properties"]["citycode"];
+                    change_indicateurs(code_insee);
+                } else {
+                    onError();
+                }
+            }
+            xhr.send();
+        }
 
 
+        function change_indicateurs(code_insee) {
+            var url = "https://apidf-preprod.cerema.fr/indicateurs/dv3f/prix/annuel/?echelle=communes&code=" + code_insee;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            var onError = function () { alert('Erreur : Réponse serveur incorrecte'); };
+            xhr.onerror = onError;
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    response = xhr.responseText;
+                    json_response = JSON.parse(response);
+                    if (json_response['detail'] != null) { alert("Problème interrogation API : " + json_response["detail"]); return null; }
+                    annees = [];
+                    prix_m2_maison = [];
+                    prix_m2_appart = [];
+                    libelle_commune = "";
+                    for (elt of json_response["results"]) {
+                        annees.push(elt["annee"]);
+                        prix_m2_maison.push(elt["pxm2_median_cod111"]);
+                        prix_m2_appart.push(elt["pxm2_median_cod121"]);
+                        libelle_commune = elt["libelle"];
+                    }
+                    graph_dv3f = document.getElementById("graph-dv3f");
+                    var trace1 = {
+                        x: annees,
+                        y: prix_m2_maison,
+                        type: 'bar',
+                        name: 'Maison',
+                        marker: {
+                            color: 'rgb(49,130,189)',
+                            opacity: 0.7,
+                        }
+                    };
 
-    class Perimetre:
+                    var trace2 = {
+                        x: annees,
+                        y: prix_m2_appart,
+                        type: 'bar',
+                        name: 'Appart',
+                        marker: {
+                            color: 'rgb(204,204,204)',
+                            opacity: 0.5
+                        }
+                    };
+                    var data = [trace1, trace2];
+                    var layout = {
+                        title: libelle_commune,
+                        xaxis: {
+                            tickangle: -45
+                        },
+                        barmode: 'group',
+                        margin: { t: 30, b: 30, l: 30, r: 25 },
+                        opacity: 0.1,
+                        paper_bgcolor: 'rgba(0, 0, 0, 0)',
+                        plot_bgcolor: 'rgba(0, 0, 0, 0)',
+                        font: { color: "rgba(255, 255, 255, 1)" },
+                    };
+                    Plotly.newPlot(graph_dv3f, data, layout);
 
-      indicateurs = {
-        "valeurfonc_median_cod1211" : "Appartements neufs ou vefa",
-        "valeurfonc_median_cod1212" : "Appartements récents",
-        "valeurfonc_median_cod1213" : "Appartements anciens",
-        "valeurfonc_median_apx" : "Appartements - T1 ou T2",
-        "valeurfonc_median_amx" : "Appartements - T3 ou T4",
-        "valeurfonc_median_agx" : "Appartements - T5 ou +",
-        "valeurfonc_median_cod1111" : "Maisons neuves ou vefa",
-        "valeurfonc_median_cod1112" : "Maisons récentes",
-        "valeurfonc_median_cod1113" : "Maisons anciennes",
-        "valeurfonc_median_mpx" : "Maisons - surface < 90 m2",
-        "valeurfonc_median_mmx" : "Maisons - surface entre 90 et 130 m2 ",
-        "valeurfonc_median_mgx" : "Maisons - surface > 130 m2",
-      }
-      x_center, y_center = 0, 0
-      mini, maxi = {}, {}
-
-      def __init__(self, code, type_perimetre="communes"):
-        self.code = code
-        self.type_perimetre = type_perimetre
-        self.calculate()
-
-      def ask(self, url):
-        try:
-          response = json.loads(open_url(url).read())
-          return response
-        except Exception as e:
-          print(e)
-          return None
-
-      def get_center(self):
-        url = f"https://geo.api.gouv.fr/epcis/{self.code}?format=geojson&geometry=bbox"
-        geojson = self.ask(url)
-        coordinates = geojson["geometry"]["coordinates"][0]
-        xmin = min([x for x, y in coordinates])
-        xmax = max([x for x, y in coordinates])
-        ymin = min([y for x, y in coordinates])
-        ymax = max([y for x, y in coordinates])
-        self.x_center = xmin + (xmax - xmin)/2.0
-        self.y_center = ymin + (ymax - ymin)/2.0
-
-      def get_perimetre(self):
-        if self.type_perimetre == "communes":
-          url = f"https://geo.api.gouv.fr/epcis/{self.code}/communes?format=geojson&geometry=contour"
-          return self.ask(url)
-
-      def calculate(self):
-        self.get_center()
-        perimetres = self.get_perimetre()
-        for indicateur in self.indicateurs:
-          self.mini[indicateur] = 9999999999
-          self.maxi[indicateur] = 0
-        for perimetre in perimetres["features"]:
-          code = perimetre["properties"]["code"]
-          nom = perimetre["properties"]["nom"]
-          loader.innerHTML = f"Interrogation pour commune {nom} ({code})"
-          url = f'https://apidf-preprod.cerema.fr/indicateurs/dv3f/{self.type_perimetre}/triennal/{code}/?annee=2019'
-          values = self.ask(url)
-          if values:
-            values = values["results"][0]
-            for indicateur in self.indicateurs:
-              perimetre["properties"][indicateur] = values[indicateur] or 0
-              if perimetre["properties"][indicateur] > 0:
-                if perimetre["properties"][indicateur] < self.mini[indicateur]:
-                  self.mini[indicateur]=perimetre["properties"][indicateur]
-                if perimetre["properties"][indicateur] > self.maxi[indicateur]:
-                  self.maxi[indicateur] = perimetre["properties"][indicateur]
-        self.geojson = perimetres
-
-      def affichage_indicateurs(self, choice):
-        if '1113' in choice:
-          return {k : v for k, v in self.indicateurs.items() if "Maisons" in v}
-        if '1213' in choice:
-          return {k : v for k, v in self.indicateurs.items() if "Appartements" in v}
+                } else {
+                    onError();
+                }
+            }
+            xhr.send();
+        }
 
 
-      def generate_map(self, choice):
-        indicateur = choice
-        affichage_indics = self.affichage_indicateurs(choice)
-        colorscale = branca.colormap.linear.YlOrRd_09.scale(self.mini[indicateur], self.maxi[indicateur])
-        colorscale.caption = "Prix médian (€) communal entre 2019 et 2021"
+        // Définition de la projection EPSG 2154
+        proj4.defs("EPSG:2154", "+proj=lcc +lat_1=49 +lat_2=44 +lat_0=46.5 +lon_0=3 +x_0=700000 +y_0=6600000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+        ol.proj.proj4.register(proj4);
 
-        def style_function(feature):
-          value = feature["properties"][indicateur]
-          return {
-            "fillOpacity": 0.9,
-            "weight": 1,
-            "fillColor": colorscale(int(value)) if value > 0 else "lightgray",
-            "color": "darkgray",
-          }
+        let euroFrLocale = Intl.NumberFormat('fr-FR');
+        let dateFrLocale = Intl.DateTimeFormat('fr-FR');
+        var url_tile_alidade_dark = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+        var url_tile_osm_bright = 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+        var url_tile_outdoors = 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
+        var url_tile_alidade = 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=f5fb92b0-9739-496f-9342-35b73ce1a46a';
 
-        m = folium.Map(location=[self.y_center, self.x_center], zoom_start=10)
-        folium.GeoJson(self.geojson, 
-                      name="prix communal", 
-                      style_function=style_function, 
-                      popup=folium.GeoJsonPopup(fields=["nom",] + list(affichage_indics.keys()), 
-                      aliases=["nom",] + list(affichage_indics.values()))).add_to(m)
-        #folium.LayerControl().add_to(m)
-        colorscale.add_to(m)
-        map.innerHTML = ""
-        loader.innerHTML = ""
-        pyscript.write("map", m)
+        // Tuiles visibles
+        var stadia_alidade_dark = new ol.layer.Tile(
+            {
+                title: "Stadia Alidade Smooth Dark",
+                source: new ol.source.XYZ({ url: url_tile_alidade_dark }),
+                baseLayer: true,
+				visible: false,
+            });
+        // Tuiles possibles
+        var stadia_alidade = new ol.layer.Tile(
+            {
+                title: "Stadia Alidade Smooth",
+                source: new ol.source.XYZ({ url: url_tile_alidade }),
+                baseLayer: true,
+                visible: false,
+            });
+        var stadia_outdoors = new ol.layer.Tile(
+            {
+                title: "Stadia Alidade Outdoors",
+                source: new ol.source.XYZ({ url: url_tile_outdoors }),
+                baseLayer: true,
+                visible: false,
+            });
+        var stadia_osm_bright = new ol.layer.Tile(
+            {
+                title: "Stadia OSM Bright",
+                source: new ol.source.XYZ({ url: url_tile_osm_bright }),
+                baseLayer: true,
+                visible: false,
+            });
 
-    def selection_indicateur(event):
-      choice_indicateur = document.getElementById("select-indicateur").value
-      perimetre.generate_map(choice_indicateur)
+        var osm = new ol.layer.Tile(
+            {
+                title: "OSM",
+                baseLayer: true,
+                source: new ol.source.OSM()//,
+                //visible: false
+            });
 
-    def selection_perimetre(event):
-      global perimetre
-      choice_perimetre = document.getElementById("select-perimetre").value
-      choice_indicateur = document.getElementById("select-indicateur").value
-      perimetre = Perimetre(choice_perimetre)
-      perimetre.generate_map(choice_indicateur)
+        // fonction qui appelle l'API et gère la pagination
+        function add_features_next_page(base_url, vectorSource, page) {
+            var url = base_url;
+            if (page > 1) { url += "&page=" + page; };
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url);
+            var onError = function () { alert('Erreur : Réponse serveur incorrecte'); };
+            xhr.onerror = onError;
+            xhr.onload = function () {
+                if (xhr.status == 200) {
+                    response = xhr.responseText;
+                    json_response = JSON.parse(response);
+                    if (json_response['detail'] != null) { alert("Problème interrogation API : " + json_response["detail"]); return null; }
+                    if (page == 1) { vectorSource.clear(); }
+                    vectorSource.addFeatures(
+                        vectorSource.getFormat().readFeatures(response));
+                    next = json_response['next']
+                    if (next != null) {
+                        page += 1;
+                        add_features_next_page(base_url, vectorSource, page);
+                    }
+                } else {
+                    onError();
+                }
+            }
+            xhr.send();
+        }
 
-    def setup():
-      # actions selection indicateur
-      change_indicateur = create_proxy(selection_indicateur)
-      event_ind = document.getElementById("select-indicateur")
-      event_ind.addEventListener("change", change_indicateur)
-      # actions selection perimetre
-      change_perimetre = create_proxy(selection_perimetre)
-      event_peri = document.getElementById("select-perimetre")
-      event_peri.addEventListener("change", change_perimetre)
+        var mutationSource = new ol.source.Vector({
+            format: new ol.format.GeoJSON(
+                {
+                dataProjection: 'EPSG:4326',
+                featureProjection: 'EPSG:2154',
+                }
+        ),
+            strategy: ol.loadingstrategy.bbox,
+            loader: function (extent, resolution, projection) {
+                var extent_lonlat = ol.proj.transformExtent(extent, "EPSG:2154", "EPSG:4326");
+                var url = 'https://apidf-preprod.cerema.fr/dvf_opendata/geomutations/?in_bbox=' + extent_lonlat.join(',');
+                add_features_next_page(url, mutationSource, 1);
+            }
+        });
+		
+		// Styles dynamiques selon codtypbien
+        function styleMutation(type) {
+            let st;
+            switch(type) {
+                case '111': st = { stroke: '#006400', fill: 'rgba(0,100,0,0.2)' }; break;
+                case '121': st = { stroke: '#8B0000', fill: 'rgba(139,0,0,0.2)' }; break;
+                default:    st = { stroke: '#191970', fill: 'rgba(0,102,204,0.15)' };
+            }
+            return new ol.style.Style({ stroke: new ol.style.Stroke({ color: st.stroke, width: 1 }), fill: new ol.style.Fill({ color: st.fill }) });
+        }
 
-    get_epcis(DEPARTEMENT)
-    setup()
+        function styleParcelle(couleur_trait, couleur_plein, dash) {
+            return new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: couleur_trait,
+                    lineDash: [dash],
+                    width: 1
+                }),
+                fill: new ol.style.Fill({
+                    color: couleur_plein
+                })
+            });
+        }
 
-  </py-script>
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-u1OknCvxWvY5kfmNBILK2hRnQC3Pr17a+RTT6rIHI7NnikvbZlHgTPOOmMi466C8"
-    crossorigin="anonymous"></script>
+        var mutationLayer = new ol.layer.Vector({
+            source: mutationSource,
+            style: f=>styleMutation(f.get("codtypbien")),
+            //maxResolution: 1.5
+            minZoom: 18,
+        });
+
+
+        var map = new ol.Map({
+            target: 'map',
+            layers: [
+                stadia_alidade, stadia_alidade_dark, stadia_outdoors, stadia_osm_bright, osm,
+                mutationLayer,
+            ],
+            controls: ol.control.defaults().extend
+                ([new ol.control.LayerPopup(),
+                ]),
+            view: new ol.View({
+                projection: 'EPSG:2154',
+                //center: [2, 48],
+                center: [490000.59, 6587000.2],
+                zoom: 12
+            })
+        });
+
+        map.on("moveend", function (event) {
+            coords_center = map.getView().getCenter();
+            var coords2154 = ol.proj.transform(coords_center, "EPSG:2154", "EPSG:4326")
+            interrogation_ban(coords2154[0], coords2154[1]);
+        });
+
+        var search = new ol.control.SearchBAN({
+            reverse: true,
+            position: false,
+            placeholder: 'Rechercher...',
+        });
+        map.addControl(search);
+
+        search.on('select', function (e) {
+            map.getView().animate({
+                center: e.coordinate,
+                zoom: Math.max(map.getView().getZoom(), 14)
+            });
+        });
+
+
+        var selection_mutation = new ol.interaction.Select({
+            multi: true,
+            style: function (feature) {
+                return new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'red',
+                        lineDash: [4],
+                        width: 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 0, 0, 0.4)'
+                    })
+                });
+            },
+            layers: [mutationLayer]
+        });
+        map.addInteraction(selection_mutation);
+        selection_mutation.on('select', affichage_infos_mutations);
+
+        function affichage_infos_mutations() {
+            var entites = selection_mutation.getFeatures();
+            //entites.getArray().sort(keysort('datemut'));
+            var txt_info = (entites.getArray().length > 0) ? '<h5>' + entites.getArray().length + ' mutation(s)</h5>' : '<h5>Transactions</h5>';
+            txt_info += '<div class="accordion" id="mutations">'
+            txt_info += '<ul class="list-group list-group-flush">'
+            entites.forEach(function (entite) {
+                idmutation = entite.get('idmutinvar');
+                libtypbien = entite.get('libtypbien');
+                datemut = entite.get('datemut');
+                datemut = new Date(datemut)
+                valeurfonc = entite.get('valeurfonc');
+                txt_info += '<li class="list-group-item d-flex justify-content-between align-items-center p-0">'
+                txt_info += '<h5><button class="btn btn-link text-left" style="underline: none;" type="button" data-parent="#mutations" data-toggle="collapse" data-target="#collapse' + idmutation + '" aria-expanded="false" aria-controls="collapse' + idmutation + '" >';
+                txt_info += dateFrLocale.format(datemut) + " - " + libtypbien + "&nbsp;&nbsp;&nbsp;"
+                txt_info += '<span class="badge badge-success badge-pill">'
+                txt_info += euroFrLocale.format(valeurfonc) + ' €'
+                txt_info += '</span></h5>';
+                txt_info += '</button></li>';
+                txt_info += '<div class="collapse" id="collapse' + idmutation + '">';
+                txt_info += '<div class="card card-body info">';
+                txt_info += detail_info(entite);
+                txt_info += '</div>';
+                txt_info += '</div>';
+
+            });
+            txt_info += "</ul>"
+            txt_info += '</div>'
+            $("#info-mutation").html(txt_info);
+        }
+
+        function detail_info(entite) {
+            var txt_info = '<ul class="list-group list-group-flush">';
+            for (key of entite.getKeys()) {
+                if (key == "geometry" || key=="idmutinvar" || key=="idopendata") continue;
+                txt_info += '<h6><li class="list-group-item d-flex justify-content-between align-items-center">';
+                txt_info += key + "&nbsp;&nbsp;&nbsp;";
+                txt_info += '<span class="badge badge-primary">';
+                txt_info += entite.get(key);
+                txt_info += '</span></li></h6>';
+
+            }
+            txt_info += "</ul>";
+            return txt_info;
+        }
+
+    </script>
 
 </body>
 
