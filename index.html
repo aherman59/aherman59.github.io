@@ -113,7 +113,7 @@
 
 
         function change_indicateurs(code_insee) {
-            var url = "https://apidf-preprod.cerema.fr/indicateurs/dv3f/prix/annuel/?echelle=communes&code=" + code_insee;
+            var url = "https://apidf.k8-dev.cerema.fr/indicateurs/dv3f/prix/annuel/?echelle=communes&code=" + code_insee;
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url);
             var onError = function () { alert('Erreur : Réponse serveur incorrecte'); };
@@ -266,7 +266,7 @@
             strategy: ol.loadingstrategy.bbox,
             loader: function (extent, resolution, projection) {
                 var extent_lonlat = ol.proj.transformExtent(extent, "EPSG:2154", "EPSG:4326");
-                var url = 'https://apidf-preprod.cerema.fr/dvf_opendata/geomutations/?in_bbox=' + extent_lonlat.join(',');
+                var url = 'https://apidf.k8-dev.cerema.fr/dvf_opendata/geomutations/?in_bbox=' + extent_lonlat.join(',');
                 add_features_next_page(url, mutationSource, 1);
             }
         });
