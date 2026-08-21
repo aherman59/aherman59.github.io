@@ -1,0 +1,892 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Démonstrateur API Données foncières · Cerema</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="description" content="Démonstrateur cartographique MapLibre GL de l'API Données foncières du Cerema (apidf.cerema.dev) : transactions DVF+ open-data et indicateurs de prix DV3F.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+<style>
+:root{
+  --ink:#0e141b;
+  --ink-2:#141c25;
+  --panel: rgba(15, 21, 28, .88);
+  --panel-solid:#141c25;
+  --line: rgba(232,226,208,.14);
+  --line-strong: rgba(232,226,208,.28);
+  --paper:#E8E2D0;
+  --text:#E7EBEE;
+  --muted:#93A0AC;
+  --gold:#C98A3A;
+  --gold-soft: rgba(201,138,58,.16);
+  --maison:#3F7D5C;
+  --appart:#A3492F;
+  --autre:#4C6B8A;
+  --danger:#c1443c;
+  --radius:10px;
+  --font-ui:'Public Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+}
+*{box-sizing:border-box;}
+html,body,#app{height:100%;margin:0;}
+body{
+  font-family:var(--font-ui);
+  color:var(--text);
+  background:var(--ink);
+  overflow:hidden;
+}
+:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+a{ color:var(--gold); }
+
+/* ---- cadastral tick mark, the page's recurring signature ---- */
+.tick{ position:relative; }
+.tick::before{
+  content:"";
+  display:inline-block;
+  width:9px; height:9px;
+  margin-right:8px;
+  background:
+    linear-gradient(var(--gold),var(--gold)) center/1.4px 9px no-repeat,
+    linear-gradient(var(--gold),var(--gold)) center/9px 1.4px no-repeat;
+  vertical-align:middle;
+}
+
+/* ---------------- top bar ---------------- */
+#topbar{
+  position:fixed; inset:0 0 auto 0; height:56px; z-index:20;
+  display:flex; align-items:center; gap:14px;
+  padding:0 14px;
+  background:var(--panel-solid);
+  border-bottom:1px solid var(--line);
+}
+#brand{ display:flex; align-items:center; white-space:nowrap; }
+#brand strong{ font-weight:700; letter-spacing:.2px; font-size:15px; }
+#brand span{ display:block; font-size:11px; color:var(--muted); margin-left:17px; margin-top:1px; }
+#brand-text{ display:flex; flex-direction:column; }
+
+#searchwrap{ position:relative; flex:1 1 420px; max-width:460px; }
+#search{
+  width:100%; padding:9px 12px; border-radius:8px;
+  border:1px solid var(--line-strong); background:var(--ink-2); color:var(--text);
+  font-family:var(--font-ui); font-size:13.5px;
+}
+#search::placeholder{ color:var(--muted); }
+#suggestions{
+  position:absolute; top:calc(100% + 4px); left:0; right:0;
+  background:var(--panel-solid); border:1px solid var(--line-strong); border-radius:8px;
+  overflow:hidden; display:none; max-height:260px; overflow-y:auto; z-index:30;
+}
+#suggestions button{
+  display:block; width:100%; text-align:left; padding:9px 12px; background:none; border:0;
+  color:var(--text); font-family:var(--font-ui); font-size:13px; cursor:pointer; border-bottom:1px solid var(--line);
+}
+#suggestions button:hover, #suggestions button:focus-visible{ background:var(--gold-soft); }
+
+#topbar-right{ margin-left:auto; display:flex; align-items:center; gap:10px; }
+.api-badge{
+  display:flex; align-items:center; gap:7px;
+  font-family:var(--font-mono); font-size:11.5px; color:var(--paper);
+  background:var(--ink-2); border:1px solid var(--line-strong);
+  padding:6px 10px; border-radius:7px; text-decoration:none; white-space:nowrap;
+}
+.api-badge:hover{ border-color:var(--gold); }
+.dot-live{ width:6px; height:6px; border-radius:50%; background:#5ec98c; box-shadow:0 0 0 3px rgba(94,201,140,.18); flex:none; }
+.iconbtn{
+  width:34px; height:34px; border-radius:7px; border:1px solid var(--line-strong);
+  background:var(--ink-2); color:var(--text); cursor:pointer; font-size:15px; flex:none;
+}
+.iconbtn:hover{ border-color:var(--gold); }
+
+/* ---------------- map ---------------- */
+#map{ position:fixed; top:56px; left:0; right:0; bottom:0; }
+
+/* ---------------- floating chrome over the map ---------------- */
+#filters{
+  position:absolute; top:12px; left:12px; z-index:10;
+  display:flex; gap:6px; flex-wrap:wrap; max-width:min(70vw,520px);
+}
+.chip{
+  font-family:var(--font-ui); font-size:12px; font-weight:600; letter-spacing:.2px;
+  padding:6px 11px; border-radius:999px; cursor:pointer;
+  background:var(--panel); border:1px solid var(--line-strong); color:var(--text);
+}
+.chip .swatch{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:6px; }
+.chip[data-active="true"]{ border-color:var(--gold); background:var(--gold-soft); color:var(--paper); }
+
+#count-pill{
+  position:absolute; top:12px; left:12px; margin-top:40px; z-index:9;
+  font-family:var(--font-mono); font-size:11px; color:var(--muted);
+  background:var(--panel); border:1px solid var(--line); border-radius:7px; padding:5px 9px;
+  display:none;
+}
+
+#zoom-hint{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:10;
+  background:var(--panel); border:1px solid var(--line-strong); border-radius:999px;
+  padding:9px 16px; font-size:12.5px; color:var(--paper); display:none; pointer-events:none;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);
+}
+
+#legend{
+  position:absolute; left:12px; bottom:12px; z-index:10;
+  background:var(--panel); border:1px solid var(--line); border-radius:8px;
+  padding:8px 12px; font-size:11.5px; color:var(--muted);
+  display:flex; gap:12px;
+}
+#legend div{ display:flex; align-items:center; gap:6px; }
+#legend span.sw{ width:9px; height:9px; border-radius:2px; }
+
+/* ---------------- side panels ---------------- */
+.panel{
+  position:absolute; z-index:10; background:var(--panel); backdrop-filter:blur(6px);
+  border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:0 10px 30px rgba(0,0,0,.35);
+  display:flex; flex-direction:column;
+}
+.panel h2{
+  margin:0; padding:10px 13px; font-size:12.5px; font-weight:700; letter-spacing:.3px;
+  text-transform:uppercase; color:var(--paper); border-bottom:1px solid var(--line); flex:none;
+}
+.panel-body{ overflow-y:auto; padding:6px 0; }
+
+#panel-mutations{
+  left:12px; bottom:64px; width:min(360px,38vw); max-height:52vh;
+}
+#panel-mutations .panel-body{ padding:0; }
+#panel-mutations .empty{ padding:16px 14px; color:var(--muted); font-size:12.5px; line-height:1.5; }
+
+.mutation-item{ border-bottom:1px solid var(--line); }
+.mutation-toggle{
+  width:100%; text-align:left; background:none; border:0; color:var(--text); cursor:pointer;
+  padding:10px 13px; display:flex; justify-content:space-between; align-items:center; gap:10px; font-family:var(--font-ui);
+}
+.mutation-toggle:hover{ background:rgba(255,255,255,.03); }
+.mutation-title{ font-size:12.5px; }
+.mutation-title .date{ color:var(--muted); font-family:var(--font-mono); font-size:11px; display:block; margin-top:2px;}
+.mutation-price{
+  font-family:var(--font-mono); font-size:12px; font-weight:600; color:#0e141b;
+  background:var(--gold); padding:3px 8px; border-radius:999px; white-space:nowrap;
+}
+.mutation-detail{ display:none; padding:0 13px 12px 13px; }
+.mutation-detail.open{ display:block; }
+.mutation-detail table{ width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:11px; }
+.mutation-detail td{ padding:3px 0; border-bottom:1px dashed var(--line); color:var(--muted); vertical-align:top; }
+.mutation-detail td:first-child{ padding-right:10px; white-space:nowrap; color:var(--text); }
+
+/* ---- groupes de transactions (parcelle avec historique) ---- */
+.mutation-group{ border-bottom:6px solid var(--ink-2); }
+.mutation-group-head{
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  padding:9px 13px; background:rgba(232,226,208,.04);
+}
+.mutation-group-head h3{ margin:0; font-size:11.5px; font-weight:700; color:var(--paper); }
+.mutation-group-head button.remove{
+  background:none; border:0; color:var(--muted); cursor:pointer; font-size:14px; line-height:1; padding:2px 4px;
+}
+.mutation-group-head button.remove:hover{ color:var(--danger); }
+.group-stats{
+  display:flex; flex-wrap:wrap; gap:5px; padding:0 13px 9px 13px;
+}
+.stat-pill{
+  font-family:var(--font-mono); font-size:10.5px; color:var(--text);
+  background:var(--ink-2); border:1px solid var(--line); border-radius:6px; padding:3px 7px;
+}
+.stat-pill b{ color:var(--gold); font-weight:600; }
+.mutation-timeline{ position:relative; padding-left:22px; }
+.mutation-timeline::before{
+  content:""; position:absolute; left:9px; top:4px; bottom:4px; width:1px; background:var(--line-strong);
+}
+.mutation-item{ border-bottom:1px solid var(--line); position:relative; }
+.mutation-item::before{
+  content:attr(data-rank); position:absolute; left:-22px; top:11px;
+  width:16px; height:16px; border-radius:50%; background:var(--ink-2); border:1px solid var(--line-strong);
+  color:var(--muted); font-family:var(--font-mono); font-size:9px; display:flex; align-items:center; justify-content:center;
+}
+.mutation-item[data-latest="true"]::before{ background:var(--gold); border-color:var(--gold); color:#0e141b; }
+
+#panel-chart{
+  right:12px; bottom:64px; width:min(360px,38vw); height:min(320px,38vh);
+}
+#panel-chart .panel-body{ flex:1; padding:8px; }
+#graph-dv3f{ width:100%; height:100%; }
+#chart-empty{ padding:16px 14px; color:var(--muted); font-size:12.5px; line-height:1.5; }
+
+/* ---------------- layer switcher control ---------------- */
+.maplibregl-ctrl.layerswitcher{ position:relative; }
+.layerswitcher-btn{
+  width:29px; height:29px; background:#fff; border:0; cursor:pointer; font-size:15px; display:block;
+}
+.layerswitcher-panel{
+  position:absolute; top:0; right:34px; z-index:11;
+  background:var(--panel-solid); border:1px solid var(--line-strong); border-radius:8px;
+  padding:10px 12px; width:190px; display:none; font-size:12.5px;
+}
+.layerswitcher-panel.open{ display:block; }
+.layerswitcher-panel h3{ margin:0 0 6px; font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--muted); }
+.layerswitcher-panel label{ display:flex; align-items:center; gap:7px; padding:4px 0; cursor:pointer; }
+.layerswitcher-panel hr{ border:0; border-top:1px solid var(--line); margin:7px 0; }
+
+/* ---------------- toasts ---------------- */
+#toasts{ position:fixed; top:66px; right:14px; z-index:50; display:flex; flex-direction:column; gap:8px; }
+.toast{
+  background:var(--danger); color:#fff; font-size:12.5px; padding:10px 14px; border-radius:8px;
+  box-shadow:0 8px 20px rgba(0,0,0,.35); max-width:320px; animation:toastin .18s ease-out;
+}
+@keyframes toastin{ from{opacity:0; transform:translateY(-6px);} to{opacity:1; transform:translateY(0);} }
+
+/* ---------------- loading indicator ---------------- */
+#loading{
+  position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:25;
+  display:none; align-items:center; gap:8px;
+  background:var(--panel-solid); border:1px solid var(--line-strong); border-radius:999px;
+  padding:6px 13px; font-size:11.5px; color:var(--muted);
+}
+#loading.active{ display:flex; }
+.spinner{ width:11px; height:11px; border-radius:50%; border:2px solid var(--line-strong); border-top-color:var(--gold); animation:spin .7s linear infinite; }
+@media (prefers-reduced-motion: reduce){ .spinner{ animation:none; } }
+@keyframes spin{ to{ transform:rotate(360deg);} }
+
+/* ---------------- about modal ---------------- */
+#about-overlay{
+  position:fixed; inset:0; z-index:60; background:rgba(6,9,12,.6); display:none; align-items:center; justify-content:center;
+}
+#about-overlay.open{ display:flex; }
+#about{
+  width:min(480px,90vw); max-height:80vh; overflow-y:auto; background:var(--panel-solid);
+  border:1px solid var(--line-strong); border-radius:12px; padding:22px 24px;
+}
+#about h2{ margin:0 0 4px; font-size:16px; }
+#about p{ font-size:13px; line-height:1.6; color:var(--text); }
+#about label{ display:block; font-size:11.5px; color:var(--muted); margin:14px 0 5px; }
+#about input[type=text]{
+  width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line-strong);
+  background:var(--ink-2); color:var(--text); font-family:var(--font-mono); font-size:12px;
+}
+#about .row{ display:flex; gap:8px; margin-top:10px; }
+#about button.primary{
+  background:var(--gold); color:#0e141b; border:0; padding:8px 14px; border-radius:7px; font-weight:600; cursor:pointer; font-size:12.5px;
+}
+#about button.ghost{
+  background:none; color:var(--muted); border:1px solid var(--line-strong); padding:8px 14px; border-radius:7px; cursor:pointer; font-size:12.5px;
+}
+#about .close{ float:right; background:none; border:0; color:var(--muted); cursor:pointer; font-size:18px; line-height:1; }
+
+/* ---------------- responsive ---------------- */
+@media (max-width:820px){
+  #brand span{ display:none; }
+  #panel-mutations, #panel-chart{ width:calc(50vw - 18px); }
+  #legend{ display:none; }
+}
+@media (max-width:640px){
+  #topbar{ gap:8px; }
+  #searchwrap{ flex-basis:160px; }
+  #panel-mutations, #panel-chart{ position:fixed; left:8px; right:8px; width:auto; bottom:8px; max-height:34vh; height:auto; }
+  #panel-chart{ bottom:calc(34vh + 16px); }
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div id="brand">
+      <div id="brand-text">
+        <strong class="tick">Données foncières</strong>
+        <span>Démonstrateur MapLibre · DVF+ &amp; DV3F</span>
+      </div>
+    </div>
+
+    <div id="searchwrap">
+      <input id="search" type="text" placeholder="Rechercher une adresse, une commune…" autocomplete="off">
+      <div id="suggestions"></div>
+    </div>
+
+    <div id="topbar-right">
+      <a class="api-badge" href="https://apidf.cerema.dev/swagger/" target="_blank" rel="noopener">
+        <span class="dot-live"></span> apidf.cerema.dev
+      </a>
+      <button class="iconbtn" id="about-btn" title="À propos de l'API" aria-label="À propos de l'API">i</button>
+    </div>
+  </header>
+
+  <div id="map"></div>
+
+  <div id="loading"><span class="spinner"></span> Interrogation de l'API…</div>
+
+  <div id="filters">
+    <button class="chip" data-filter="all" data-active="true">Toutes les mutations</button>
+    <button class="chip" data-filter="111"><span class="swatch" style="background:#3F7D5C"></span>Maisons</button>
+    <button class="chip" data-filter="121"><span class="swatch" style="background:#A3492F"></span>Appartements</button>
+    <button class="chip" data-filter="autre"><span class="swatch" style="background:#4C6B8A"></span>Autres</button>
+  </div>
+  <div id="count-pill"></div>
+
+  <div id="zoom-hint">Zoomez sur un secteur (niveau ≥ 15) pour afficher les mutations DVF+</div>
+
+  <div id="legend">
+    <div><span class="sw" style="background:#3F7D5C"></span>Maison</div>
+    <div><span class="sw" style="background:#A3492F"></span>Appartement</div>
+    <div><span class="sw" style="background:#4C6B8A"></span>Autre</div>
+  </div>
+
+  <section id="panel-mutations" class="panel">
+    <h2 class="tick">Transactions</h2>
+    <div class="panel-body" id="mutations-body">
+      <div class="empty">Cliquez sur une parcelle colorée pour afficher l'historique de ses transactions, triées chronologiquement. Maj+clic pour comparer plusieurs parcelles.</div>
+    </div>
+  </section>
+
+  <section id="panel-chart" class="panel">
+    <h2 class="tick">Indicateur DV3F · prix au m²</h2>
+    <div class="panel-body">
+      <div id="chart-empty">Déplacez la carte pour afficher l'historique des prix de la commune au centre de la vue.</div>
+      <div id="graph-dv3f"></div>
+    </div>
+  </section>
+
+  <div id="toasts"></div>
+
+  <div id="about-overlay">
+    <div id="about" role="dialog" aria-modal="true" aria-labelledby="about-title">
+      <button class="close" id="about-close" aria-label="Fermer">×</button>
+      <h2 id="about-title" class="tick">API Données foncières</h2>
+      <p>
+        Cette page interroge en direct l'<strong>API Données foncières</strong> du Cerema et de la DGALN,
+        qui donne accès aux transactions DVF+ open-data et à des indicateurs de marché issus de DV3F.
+        Documentation et bac à sable&nbsp;:
+        <a href="https://apidf.cerema.dev/swagger/" target="_blank" rel="noopener">apidf.cerema.dev/swagger</a>
+        · ressources complètes sur <a href="https://datafoncier.cerema.fr" target="_blank" rel="noopener">datafoncier.cerema.fr</a>.
+      </p>
+      <p>
+        Les flux utilisés ici (géomutations DVF+ open-data, indicateurs de prix DV3F) sont en accès libre.
+        D'autres flux (Fichiers fonciers, DV3F non anonymisé…) sont réservés aux structures publiques bénéficiaires
+        et nécessitent un jeton d'accès obtenu via <a href="https://portaildf.cerema.fr" target="_blank" rel="noopener">le portail des données foncières</a>.
+      </p>
+      <label for="api-base">Base de l'API</label>
+      <input id="api-base" type="text" value="https://apidf.cerema.dev">
+      <label for="api-token">Jeton d'accès (facultatif, pour les flux à accès restreint)</label>
+      <input id="api-token" type="text" placeholder="Bearer …" autocomplete="off">
+      <div class="row">
+        <button class="primary" id="about-save">Enregistrer</button>
+        <button class="ghost" id="about-cancel">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------------------------------------------------------------- */
+/*  Configuration                                                    */
+/* ---------------------------------------------------------------- */
+const DEFAULT_API_BASE = "https://apidf.cerema.dev";
+const GEOCODE_BASE = "https://data.geopf.fr/geocodage";
+const ZOOM_THRESHOLD = 15;
+const MAX_PAGES = 25;
+
+let API_BASE = localStorage.getItem("apidf_base") || DEFAULT_API_BASE;
+let API_TOKEN = localStorage.getItem("apidf_token") || "";
+
+const euroFr = new Intl.NumberFormat("fr-FR");
+const dateFr = new Intl.DateTimeFormat("fr-FR");
+
+const TYPE_LABELS = { "111": "Maison", "121": "Appartement" };
+const TYPE_COLORS = { "111": "#3F7D5C", "121": "#A3492F" };
+const HIDDEN_KEYS = new Set(["geometry", "idopendata"]);
+
+const EMPTY_FC = { type: "FeatureCollection", features: [] };
+
+function forceHttps(url){
+  // l'API renvoie parfois ses liens de pagination ("next") en http:// —
+  // une page servie en https (ex. GitHub Pages) bloquerait alors ces
+  // requêtes comme "contenu mixte actif". On force donc https côté client.
+  return url.replace(/^http:\/\//i, "https://");
+}
+
+function apiFetch(url){
+  const headers = {};
+  if (API_TOKEN) headers["Authorization"] = API_TOKEN.startsWith("Bearer ") ? API_TOKEN : "Bearer " + API_TOKEN;
+  return fetch(forceHttps(url), { headers });
+}
+
+function debounce(fn, wait){
+  let t;
+  return function(...args){ clearTimeout(t); t = setTimeout(() => fn.apply(this, args), wait); };
+}
+
+/* ---------------------------------------------------------------- */
+/*  Toasts + loading                                                 */
+/* ---------------------------------------------------------------- */
+function toast(msg){
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = msg;
+  document.getElementById("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+function setLoading(active){
+  document.getElementById("loading").classList.toggle("active", active);
+}
+
+/* ---------------------------------------------------------------- */
+/*  Basemaps (IGN Géoplateforme, sans clé) + carte MapLibre           */
+/* ---------------------------------------------------------------- */
+const WMTS = (layer, format) =>
+  `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}` +
+  `&STYLE=normal&FORMAT=${format}&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}`;
+
+const style = {
+  version: 8,
+  sources: {
+    "basemap-plan": { type: "raster", tiles: [WMTS("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","image/png")], tileSize: 256, attribution: "© IGN - Géoplateforme" },
+    "basemap-photo": { type: "raster", tiles: [WMTS("ORTHOIMAGERY.ORTHOPHOTOS","image/jpeg")], tileSize: 256, attribution: "© IGN - Géoplateforme" },
+    "basemap-osm": { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "© OpenStreetMap contributors" },
+    "cadastre": { type: "raster", tiles: [WMTS("CADASTRALPARCELS.PARCELLAIRE_EXPRESS","image/png")], tileSize: 256, attribution: "© DGFiP / IGN" }
+  },
+  layers: [
+    { id: "basemap-osm", type: "raster", source: "basemap-osm", layout: { visibility: "none" } },
+    { id: "basemap-photo", type: "raster", source: "basemap-photo", layout: { visibility: "none" } },
+    { id: "basemap-plan", type: "raster", source: "basemap-plan", layout: { visibility: "visible" } },
+    { id: "cadastre", type: "raster", source: "cadastre", layout: { visibility: "none" }, paint: { "raster-opacity": 0.85 } }
+  ]
+};
+
+const map = new maplibregl.Map({
+  container: "map",
+  style,
+  center: [3.0573, 50.6292], // Lille — Hauts-de-France
+  zoom: 13,
+  attributionControl: false
+});
+
+map.addControl(new maplibregl.AttributionControl({ compact: true }));
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
+map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-left");
+map.addControl(new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: false }), "top-right");
+
+/* ---- custom layer-switcher control ---- */
+class LayerSwitcherControl {
+  onAdd(mapRef){
+    this._map = mapRef;
+    this._container = document.createElement("div");
+    this._container.className = "maplibregl-ctrl maplibregl-ctrl-group layerswitcher";
+
+    const btn = document.createElement("button");
+    btn.className = "layerswitcher-btn";
+    btn.type = "button";
+    btn.title = "Fonds de carte";
+    btn.textContent = "▤";
+
+    const panel = document.createElement("div");
+    panel.className = "layerswitcher-panel";
+    panel.innerHTML = `
+      <h3>Fond de carte</h3>
+      <label><input type="radio" name="basemap" value="basemap-plan" checked> Plan IGN</label>
+      <label><input type="radio" name="basemap" value="basemap-photo"> Photographies aériennes</label>
+      <label><input type="radio" name="basemap" value="basemap-osm"> OpenStreetMap</label>
+      <hr>
+      <label><input type="checkbox" id="toggle-cadastre"> Parcelles cadastrales</label>
+    `;
+
+    btn.addEventListener("click", () => panel.classList.toggle("open"));
+    panel.querySelectorAll('input[name="basemap"]').forEach(r => {
+      r.addEventListener("change", (e) => {
+        ["basemap-plan","basemap-photo","basemap-osm"].forEach(id =>
+          mapRef.setLayoutProperty(id, "visibility", id === e.target.value ? "visible" : "none"));
+      });
+    });
+    panel.querySelector("#toggle-cadastre").addEventListener("change", (e) => {
+      mapRef.setLayoutProperty("cadastre", "visibility", e.target.checked ? "visible" : "none");
+    });
+
+    this._container.appendChild(btn);
+    this._container.appendChild(panel);
+    return this._container;
+  }
+  onRemove(){ this._container.parentNode.removeChild(this._container); }
+}
+map.addControl(new LayerSwitcherControl(), "top-right");
+
+/* ---------------------------------------------------------------- */
+/*  Couche des mutations DVF+ open-data                              */
+/* ---------------------------------------------------------------- */
+let activeFilter = "all";
+// une "sélection" est une liste de groupes ; chaque groupe correspond à un clic
+// et regroupe toutes les mutations trouvées sous le curseur (même parcelle),
+// pour permettre l'historique chronologique et les stats quand il y en a plusieurs.
+let selectionGroups = [];
+let featuresById = new Map();
+
+function typeFilterExpr(filter){
+  if (filter === "all") return null;
+  if (filter === "autre") return ["!", ["in", ["get", "codtypbien"], ["literal", ["111", "121"]]]];
+  return ["==", ["get", "codtypbien"], filter];
+}
+
+map.on("load", () => {
+  map.addSource("mutations", { type: "geojson", data: EMPTY_FC });
+
+  map.addLayer({
+    id: "mutations-fill", type: "fill", source: "mutations",
+    paint: {
+      "fill-color": ["match", ["get", "codtypbien"], "111", TYPE_COLORS["111"], "121", TYPE_COLORS["121"], "#4C6B8A"],
+      "fill-opacity": 0.55
+    }
+  });
+  map.addLayer({
+    id: "mutations-line", type: "line", source: "mutations",
+    paint: {
+      "line-color": ["match", ["get", "codtypbien"], "111", TYPE_COLORS["111"], "121", TYPE_COLORS["121"], "#4C6B8A"],
+      "line-width": 1.1
+    }
+  });
+  map.addLayer({
+    id: "mutations-highlight", type: "line", source: "mutations",
+    filter: ["in", ["get", "idmutinvar"], ["literal", []]],
+    paint: { "line-color": "#C98A3A", "line-width": 3, "line-dasharray": [1.5, 1.5] }
+  });
+
+  refreshMutations();
+  refreshIndicateur();
+});
+
+map.on("moveend", debounce(() => { refreshMutations(); refreshIndicateur(); }, 400));
+
+map.on("mouseenter", "mutations-fill", () => map.getCanvas().style.cursor = "pointer");
+map.on("mouseleave", "mutations-fill", () => map.getCanvas().style.cursor = "");
+
+map.on("click", (e) => {
+  // petite tolérance autour du clic (± 3px) pour bien capter toutes les
+  // mutations superposées sur une même parcelle, pas seulement celle du dessus
+  const box = [[e.point.x - 3, e.point.y - 3], [e.point.x + 3, e.point.y + 3]];
+  const feats = map.queryRenderedFeatures(box, { layers: ["mutations-fill"] });
+  const ids = Array.from(new Set(feats.map(f => f.properties.idmutinvar)));
+
+  if (ids.length === 0){
+    if (!e.originalEvent.shiftKey) selectionGroups = [];
+  } else {
+    const key = ids.slice().sort().join(",");
+    const existingIndex = selectionGroups.findIndex(g => g.key === key);
+    if (e.originalEvent.shiftKey){
+      // Maj+clic : ajoute ou retire cette parcelle de la comparaison
+      if (existingIndex >= 0) selectionGroups.splice(existingIndex, 1);
+      else selectionGroups.push({ key, ids });
+    } else {
+      // clic simple : reclique sur la même parcelle -> désélectionne, sinon la remplace
+      selectionGroups = (existingIndex >= 0 && selectionGroups.length === 1) ? [] : [{ key, ids }];
+    }
+  }
+  applyHighlight();
+  renderMutationsPanel();
+});
+
+function applyHighlight(){
+  const allIds = selectionGroups.flatMap(g => g.ids);
+  map.setFilter("mutations-highlight", ["in", ["get", "idmutinvar"], ["literal", allIds]]);
+}
+
+async function fetchAllPages(url){
+  let features = [];
+  let next = url;
+  let pages = 0;
+  while (next && pages < MAX_PAGES){
+    const res = await apiFetch(next);
+    if (!res.ok) throw new Error("réponse " + res.status);
+    const json = await res.json();
+    if (json && json.detail) throw new Error(json.detail);
+    features = features.concat(json.features || []);
+    next = json.next;
+    pages++;
+  }
+  return { features, truncated: !!next };
+}
+
+async function refreshMutations(){
+  const hint = document.getElementById("zoom-hint");
+  const pill = document.getElementById("count-pill");
+  if (map.getZoom() < ZOOM_THRESHOLD){
+    hint.style.display = "block";
+    pill.style.display = "none";
+    map.getSource("mutations").setData(EMPTY_FC);
+    featuresById.clear();
+    return;
+  }
+  hint.style.display = "none";
+
+  const b = map.getBounds();
+  const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(",");
+  const url = `${API_BASE}/dvf_opendata/geomutations/?in_bbox=${bbox}`;
+
+  setLoading(true);
+  try {
+    const { features, truncated } = await fetchAllPages(url);
+    const fc = { type: "FeatureCollection", features };
+    map.getSource("mutations").setData(fc);
+
+    featuresById.clear();
+    features.forEach(f => featuresById.set(f.properties.idmutinvar, f.properties));
+
+    pill.style.display = "block";
+    pill.textContent = features.length + " mutation(s) affichée(s)" + (truncated ? " · certaines pages n'ont pas été chargées, zoomez davantage" : "");
+
+    // drop selections that fell out of view
+    selectionGroups = selectionGroups
+      .map(g => ({ key: g.key, ids: g.ids.filter(id => featuresById.has(id)) }))
+      .filter(g => g.ids.length > 0);
+    applyHighlight();
+    renderMutationsPanel();
+  } catch (err){
+    toast("Impossible d'interroger l'API Données foncières : " + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function groupStats(props){
+  const values = props
+    .map(p => p.valeurfonc)
+    .filter(v => v !== null && v !== undefined && !isNaN(v));
+  if (values.length === 0) return null;
+  const sum = values.reduce((a, b) => a + b, 0);
+  const avg = sum / values.length;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const firstVal = props[0].valeurfonc;
+  const lastVal = props[props.length - 1].valeurfonc;
+  const evolution = (firstVal !== null && firstVal !== undefined && firstVal > 0 && lastVal !== null && lastVal !== undefined)
+    ? ((lastVal - firstVal) / firstVal) * 100
+    : null;
+  return { sum, avg, min, max, evolution };
+}
+
+function renderMutationsPanel(){
+  const body = document.getElementById("mutations-body");
+  if (selectionGroups.length === 0){
+    body.innerHTML = '<div class="empty">Cliquez sur une parcelle colorée pour afficher l\'historique de ses transactions, triées chronologiquement. Maj+clic pour comparer plusieurs parcelles.</div>';
+    return;
+  }
+
+  body.innerHTML = "";
+  selectionGroups.forEach(group => {
+    // toutes les mutations trouvées sous ce clic, triées de la plus ancienne à la plus récente
+    const props = group.ids.map(id => featuresById.get(id)).filter(Boolean)
+      .sort((a, b) => new Date(a.datemut || 0) - new Date(b.datemut || 0));
+    if (props.length === 0) return;
+
+    const wrap = document.createElement("div");
+    wrap.className = "mutation-group";
+
+    const head = document.createElement("div");
+    head.className = "mutation-group-head";
+    head.innerHTML = `<h3 class="tick">${props.length > 1 ? props.length + " transactions sur cette parcelle" : "1 transaction"}</h3>`;
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "remove";
+    removeBtn.type = "button";
+    removeBtn.title = "Retirer cette parcelle de la sélection";
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", () => {
+      selectionGroups = selectionGroups.filter(g => g.key !== group.key);
+      applyHighlight();
+      renderMutationsPanel();
+    });
+    head.appendChild(removeBtn);
+    wrap.appendChild(head);
+
+    // stats complémentaires uniquement quand la parcelle a un historique
+    if (props.length > 1){
+      const stats = groupStats(props);
+      const first = props[0], last = props[props.length - 1];
+      const statsRow = document.createElement("div");
+      statsRow.className = "group-stats";
+      if (stats){
+        statsRow.innerHTML +=
+          `<span class="stat-pill">Cumulé <b>${euroFr.format(Math.round(stats.sum))} €</b></span>` +
+          `<span class="stat-pill">Moyenne <b>${euroFr.format(Math.round(stats.avg))} €</b></span>` +
+          `<span class="stat-pill">Écart <b>${euroFr.format(stats.min)} – ${euroFr.format(stats.max)} €</b></span>`;
+        if (stats.evolution !== null){
+          const sign = stats.evolution >= 0 ? "+" : "";
+          statsRow.innerHTML += `<span class="stat-pill">Évolution 1<sup>re</sup> → dernière <b>${sign}${stats.evolution.toFixed(0)} %</b></span>`;
+        }
+      }
+      if (first.datemut && last.datemut){
+        statsRow.innerHTML += `<span class="stat-pill">Période <b>${dateFr.format(new Date(first.datemut))} → ${dateFr.format(new Date(last.datemut))}</b></span>`;
+      }
+      wrap.appendChild(statsRow);
+    }
+
+    const timeline = document.createElement("div");
+    timeline.className = "mutation-timeline";
+
+    props.forEach((p, idx) => {
+      const item = document.createElement("div");
+      item.className = "mutation-item";
+      item.dataset.rank = String(idx + 1);
+      if (props.length > 1 && idx === props.length - 1) item.dataset.latest = "true";
+
+      const date = p.datemut ? dateFr.format(new Date(p.datemut)) : "—";
+      const prix = (p.valeurfonc !== undefined && p.valeurfonc !== null) ? euroFr.format(p.valeurfonc) + " €" : "—";
+
+      const toggle = document.createElement("button");
+      toggle.className = "mutation-toggle";
+      toggle.type = "button";
+      toggle.innerHTML = `<span class="mutation-title">${p.libtypbien || "Mutation"}<span class="date">${date}</span></span><span class="mutation-price">${prix}</span>`;
+
+      const detail = document.createElement("div");
+      detail.className = "mutation-detail";
+      const rows = Object.keys(p).filter(k => !HIDDEN_KEYS.has(k))
+        .map(k => `<tr><td>${k}</td><td>${p[k] !== null && p[k] !== undefined ? p[k] : "—"}</td></tr>`).join("");
+      detail.innerHTML = `<table>${rows}</table>`;
+
+      toggle.addEventListener("click", () => detail.classList.toggle("open"));
+
+      item.appendChild(toggle);
+      item.appendChild(detail);
+      timeline.appendChild(item);
+    });
+
+    wrap.appendChild(timeline);
+    body.appendChild(wrap);
+  });
+}
+
+/* ---- filtres par type de bien ---- */
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    document.querySelectorAll(".chip").forEach(c => c.dataset.active = "false");
+    chip.dataset.active = "true";
+    activeFilter = chip.dataset.filter;
+    const expr = typeFilterExpr(activeFilter);
+    map.setFilter("mutations-fill", expr);
+    map.setFilter("mutations-line", expr);
+  });
+});
+
+/* ---------------------------------------------------------------- */
+/*  Indicateur DV3F (prix au m² par commune, au centre de la carte)  */
+/* ---------------------------------------------------------------- */
+async function refreshIndicateur(){
+  const center = map.getCenter();
+  try {
+    const res = await apiFetch(`${GEOCODE_BASE}/reverse/?lon=${center.lng}&lat=${center.lat}`);
+    if (!res.ok) throw new Error("géocodage indisponible");
+    const json = await res.json();
+    const feat = json.features && json.features[0];
+    if (!feat) return;
+    const codeInsee = feat.properties.citycode;
+    await drawIndicateur(codeInsee);
+  } catch (err){
+    // le géocodage inverse est un confort d'UX : on échoue silencieusement
+  }
+}
+
+async function drawIndicateur(codeInsee){
+  const url = `${API_BASE}/indicateurs/dv3f/prix/annuel/?echelle=communes&code=${codeInsee}`;
+  try {
+    const res = await apiFetch(url);
+    const json = await res.json();
+    if (json.detail) throw new Error(json.detail);
+
+    const annees = [], pxMaison = [], pxAppart = [];
+    let libelle = "";
+    (json.results || []).forEach(elt => {
+      annees.push(elt.annee);
+      pxMaison.push(elt.pxm2_median_cod111);
+      pxAppart.push(elt.pxm2_median_cod121);
+      libelle = elt.libelle;
+    });
+
+    document.getElementById("chart-empty").style.display = "none";
+
+    const trace1 = { x: annees, y: pxMaison, type: "bar", name: "Maison", marker: { color: "#3F7D5C", opacity: 0.85 } };
+    const trace2 = { x: annees, y: pxAppart, type: "bar", name: "Appartement", marker: { color: "#A3492F", opacity: 0.85 } };
+    const layout = {
+      title: { text: libelle || codeInsee, font: { size: 12, color: "#E7EBEE", family: "Public Sans" } },
+      xaxis: { tickangle: -45, color: "#93A0AC", tickfont: { size: 9 } },
+      yaxis: { color: "#93A0AC", tickfont: { size: 9 } },
+      barmode: "group",
+      margin: { t: 28, b: 32, l: 34, r: 10 },
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(0,0,0,0)",
+      font: { color: "#E7EBEE", size: 10 },
+      legend: { orientation: "h", y: -0.25, font: { size: 9 } }
+    };
+    Plotly.newPlot("graph-dv3f", [trace1, trace2], layout, { displayModeBar: false, responsive: true });
+  } catch (err){
+    // pas d'indicateur pour cette commune / cette échelle : on n'affiche rien de plus
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/*  Recherche d'adresse (géocodage BAN / Géoplateforme)              */
+/* ---------------------------------------------------------------- */
+const searchInput = document.getElementById("search");
+const suggestions = document.getElementById("suggestions");
+
+const runSearch = debounce(async (q) => {
+  if (!q || q.length < 3){ suggestions.style.display = "none"; return; }
+  try {
+    const res = await fetch(`${GEOCODE_BASE}/search?q=${encodeURIComponent(q)}&limit=6&autocomplete=1`);
+    const json = await res.json();
+    const feats = json.features || [];
+    suggestions.innerHTML = "";
+    if (feats.length === 0){ suggestions.style.display = "none"; return; }
+    feats.forEach(f => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = f.properties.label;
+      btn.addEventListener("click", () => {
+        const [lon, lat] = f.geometry.coordinates;
+        map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), ZOOM_THRESHOLD + 1) });
+        suggestions.style.display = "none";
+        searchInput.value = f.properties.label;
+      });
+      suggestions.appendChild(btn);
+    });
+    suggestions.style.display = "block";
+  } catch (err){
+    suggestions.style.display = "none";
+  }
+}, 250);
+
+searchInput.addEventListener("input", (e) => runSearch(e.target.value.trim()));
+document.addEventListener("click", (e) => {
+  if (!searchInput.contains(e.target) && !suggestions.contains(e.target)) suggestions.style.display = "none";
+});
+
+/* ---------------------------------------------------------------- */
+/*  À propos / configuration de l'API                                */
+/* ---------------------------------------------------------------- */
+const aboutOverlay = document.getElementById("about-overlay");
+document.getElementById("about-btn").addEventListener("click", () => {
+  document.getElementById("api-base").value = API_BASE;
+  document.getElementById("api-token").value = API_TOKEN;
+  aboutOverlay.classList.add("open");
+});
+document.getElementById("about-close").addEventListener("click", () => aboutOverlay.classList.remove("open"));
+document.getElementById("about-cancel").addEventListener("click", () => aboutOverlay.classList.remove("open"));
+document.getElementById("about-save").addEventListener("click", () => {
+  API_BASE = document.getElementById("api-base").value.trim() || DEFAULT_API_BASE;
+  API_TOKEN = document.getElementById("api-token").value.trim();
+  localStorage.setItem("apidf_base", API_BASE);
+  localStorage.setItem("apidf_token", API_TOKEN);
+  aboutOverlay.classList.remove("open");
+  refreshMutations();
+  refreshIndicateur();
+});
+aboutOverlay.addEventListener("click", (e) => { if (e.target === aboutOverlay) aboutOverlay.classList.remove("open"); });
+
+})();
+</script>
+</body>
+</html>
